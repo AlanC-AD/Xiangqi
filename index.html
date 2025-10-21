@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xiangqi – Two-Player Remote</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --board:#f7d9a6;
+      --grid:#6a3a12;
+      --river:#8fd3ff;
+      --palace:#e87ea1;
+      --red:#e63946;
+      --black:#1f1f1f;
+      --gold:#ffd166;
+      --shadow:rgba(0,0,0,.25);
+      --accent:#4cc9f0;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#0b1020,#16223f);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#fff}
+    .wrap{max-width:1200px;margin:auto;padding:20px;box-sizing:border-box;height:100vh;display:flex;flex-direction:column}
+    header{display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap}
+    .left-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    h1{font-size:1.1rem;margin:0;font-weight:700;letter-spacing:.2px}
+    .pill{border-radius:999px;padding:6px 10px;font-size:.85rem;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px}
+    .pill.turn{background:#2a4480;border-color:#4d6ed0;color:#fff}
+    .pill.turn .dot{width:10px;height:10px;border-radius:50%;display:inline-block;background:#999;box-shadow:0 0 0 2px rgba(255,255,255,.08) inset}
+    .pill.turn.red .dot{background:var(--red)}
+    .pill.turn.black .dot{background:#222}
+    .pill.seat{background:#eee;color:#111;border-color:#d0d0d0}
+    .pill.seat .label{color:#111;font-weight:600}
+    .pill.seat .who{font-weight:800}
+    .pill.seat .who.red{color:var(--red)}
+    .pill.seat .who.black{color:#000}
+    .boardbox{display:grid;grid-template-columns: minmax(280px, 1fr) 360px; gap:16px; align-items:start; flex:1; min-height:0;}
+    @media (max-width: 980px){.boardbox{grid-template-columns:1fr}}
+
+    /* -------- Board sizing: never truncates -------- */
+    /* Default: width-constrained (narrow screens) */
+    .board{background:var(--board);border-radius:18px;box-shadow:0 8px 30px var(--shadow);position:relative;
+           aspect-ratio:9/10; width:100%; max-width:100%; height:auto; justify-self:center; align-self:start; overflow:hidden;}
+    svg{display:block;width:100%;height:auto}
+
+    /* On wider viewports, height-constrain to avoid vertical scroll while preserving full width */
+    @media (min-aspect-ratio: 9/10){
+      .board{height:calc(100vh - 220px); width:auto; max-height:100%;}
+      svg{height:100%; width:auto;}
+    }
+
+    /* Piece visuals */
+    .piece{cursor:pointer;filter:drop-shadow(0 2px 4px var(--shadow))}
+    .piece .ring{stroke:var(--gold);stroke-width:4.5;fill:#fff}
+    .piece.red .ring{fill:#fff6f6}
+    .piece.black .ring{fill:#f8fbff}
+    .piece .icon{fill:currentColor}
+    .piece.red{color:var(--red)}
+    .piece.black{color:#222}
+    .ghost{opacity:.35}
+
+    /* Highlights */
+    .sq-hl{fill:transparent;stroke:var(--accent);stroke-width:3.2;stroke-dasharray:6 6}
+    .sq-move{fill:rgba(76,201,240,.25)}
+
+    /* Sidebar */
+    .side{background:#0e1731;border:1px solid #23335f;border-radius:14px;padding:12px;overflow:auto;max-height:calc(100vh - 160px)}
+    .side h2{margin:.2rem 0 .6rem;font-size:1rem}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    button{background:linear-gradient(180deg,#1a2b57,#0f1b3f);border:1px solid #29407d;color:#cfe8ff;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    input,select{background:#0c1430;border:1px solid #24356b;color:#e5f1ff;border-radius:8px;padding:8px 10px}
+    .links{font-size:.9rem;color:#b7d5ff}
+    a{color:#7cd3ff}
+    .log{background:#0b132c;border:1px solid #1f2f61;border-radius:10px;padding:10px;max-height:180px;overflow:auto;font-family:ui-monospace,Consolas,monospace}
+    .status{margin:.4rem 0 .8rem;color:#b7d5ff}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="left-head">
+      <h1>🀄 Xiangqi – Two-Player (Remote)</h1>
+      <span class="pill seat" id="seatPill"><span class="label">My Seat:</span> <span class="who">—</span></span>
+      <span class="pill turn" id="turnPill"><span class="dot"></span><span class="txt">Turn: —</span></span>
+    </div>
+    <div class="links">
+      Game: <span id="gameIdSpan">—</span> · <a id="copyRed" href="#">Copy Red link</a> · <a id="copyBlack" href="#">Copy Black link</a>
+    </div>
+  </header>
+
+  <div class="boardbox">
+    <div class="board">
+      <svg id="board" viewBox="0 0 900 1000" xmlns="http://www.w3.org/2000/svg" aria-label="Xiangqi board">
+        <defs>
+          <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f9e4be"/>
+            <stop offset="100%" stop-color="#f1c98a"/>
+          </linearGradient>
+
+          <!-- Pictogram icons (64×64 design grid) -->
+          <g id="ic-chariot" fill="currentColor" stroke="currentColor" stroke-width="2.2">
+            <path d="M12 22 h40 l4 8 H8z" fill="none"/>
+            <rect x="12" y="30" width="40" height="18" rx="3" fill="none"/>
+            <path d="M22 30 v18 M32 30 v18 M42 30 v18" stroke-width="2"/>
+            <circle cx="22" cy="54" r="6" fill="none"/><path d="M22 48 v12 M16 54 h12" stroke-width="2"/>
+            <circle cx="42" cy="54" r="6" fill="none"/><path d="M42 48 v12 M36 54 h12" stroke-width="2"/>
+          </g>
+
+          <g id="ic-horse" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M46 20 l-8 6 -4 -6 -10 8 -6 10 8 6 v8 a12 12 0 0 0 24 0 v-8 l6 -10" />
+            <circle cx="36" cy="28" r="1.8" fill="currentColor"/>
+            <path d="M32 22 l-4 -6" />
+          </g>
+
+          <g id="ic-elephant" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 28 a12 12 0 0 1 24 0 v8 a10 10 0 0 1 -10 10 h-4 a10 10 0 0 1 -10 -10z"/>
+            <path d="M20 32 a10 10 0 0 0 10 10" />
+            <path d="M44 36 c0 8 -6 14 -12 14 6 0 10 4 10 8" />
+            <path d="M36 44 l4 4" />
+          </g>
+
+          <g id="ic-advisor" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round">
+            <path d="M32 18 l14 8 v12 c0 10 -8 18 -14 20 -6 -2 -14 -10 -14 -20 v-12z"/>
+            <path d="M32 26 l3 6 h6 l-5 4 2 6 -6 -3 -6 3 2 -6 -5 -4 h6z" />
+          </g>
+
+          <g id="ic-general" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 40 h32 l-2 -12 -8 6 -6 -10 -6 10 -8 -6z" />
+            <rect x="18" y="40" width="28" height="8" rx="2"/>
+            <circle cx="32" cy="30" r="3" fill="currentColor"/>
+          </g>
+
+          <g id="ic-cannon" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 36 h28 l8 -6" />
+            <rect x="18" y="38" width="20" height="8" rx="2"/>
+            <circle cx="40" cy="52" r="8"/>
+            <path d="M40 44 v16 M32 52 h16" />
+            <path d="M52 28 l4 -4 M54 32 l6 0" />
+          </g>
+
+          <g id="ic-soldier" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 22 v28" />
+            <path d="M18 22 l-4 6 h8z" fill="currentColor"/>
+            <path d="M18 28 h22 c4 0 6 2 6 4 s-2 4 -6 4 h-22z" />
+            <rect x="14" y="52" width="28" height="6" rx="2" />
+          </g>
+        </defs>
+
+        <!-- wood background -->
+        <rect x="0" y="0" width="900" height="1000" fill="url(#wood)"/>
+
+        <!-- Grid 9x10 (points are intersections) -->
+        <g id="grid" stroke="var(--grid)" stroke-width="3.8">
+          <g id="vlines"></g>
+          <g id="hlines"></g>
+
+          <!-- River -->
+          <rect x="0" y="450" width="900" height="100" fill="var(--river)" opacity=".5"/>
+          <!-- River labels -->
+          <g font-family="serif" font-style="italic" fill="var(--grid)" opacity=".7">
+            <text x="200" y="505" font-size="38">楚河</text>
+            <text x="680" y="505" font-size="38">汉界</text>
+          </g>
+
+          <!-- Palace diagonals (corrected position & length; slightly inset) -->
+          <g stroke="var(--palace)" stroke-width="2.8">
+            <!-- Top palace: corners at (350,50)-(550,250); inset 6px -->
+            <path d="M356,56 L544,244 M544,56 L356,244" />
+            <!-- Bottom palace: corners at (350,750)-(550,950); inset 6px -->
+            <path d="M356,756 L544,944 M544,756 L356,944" />
+          </g>
+        </g>
+
+        <!-- Move highlights -->
+        <g id="highlights"></g>
+
+        <!-- Pieces layer -->
+        <g id="pieces"></g>
+      </svg>
+    </div>
+    <div class="side">
+      <h2>Game Controls</h2>
+      <div class="row">
+        <button id="btnNew">➕ New Game</button>
+        <button id="btnResign">🏳️ Resign</button>
+        <button id="btnRefresh">🔄 Refresh</button>
+      </div>
+      <div class="status" id="status">Ready.</div>
+      <div class="log" id="log"></div>
+      <h2>Share Links</h2>
+      <div class="links" id="shareBox">—</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- tweakable icon layout constants ----
+const ICON_SCALE = 0.94;   // slightly smaller so everything sits inside the ring
+const ICON_STROKE = 3.4;   // a bit bolder
+const ICON_OFFSET_Y = -4;  // nudge up a touch (negative moves up)
+// ----------------------------------------
+
+// Safe base path so it works at /xiangqi and /xiangqi/
+const API_BASE = (() => {
+  const p = location.pathname;
+  return p.endsWith('/') ? p : p.replace(/[^/]*$/, '');
+})();
+const params = new URLSearchParams(location.search);
+let GAME = params.get('game') || '';
+let TOKEN = params.get('token') || '';
+const api = (action, body) => fetch(API_BASE + 'api.php?action='+action, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body||{})
+}).then(r=>r.json());
+const $ = sel => document.querySelector(sel);
+const piecesG = $('#pieces'); const hlG = $('#highlights');
+const seatPill = $('#seatPill'); const turnPill = $('#turnPill');
+const statusEl = $('#status'); const logEl = $('#log'); const gameIdSpan = $('#gameIdSpan'); const shareBox = $('#shareBox');
+
+(function drawGrid(){
+  const v = document.getElementById('vlines');
+  const h = document.getElementById('hlines');
+  for (let f=0; f<9; f++){
+    const x = 50+f*100;
+    const p1 = document.createElementNS('http://www.w3.org/2000/svg','path'); p1.setAttribute('d',`M${x},50 L${x},450`); v.appendChild(p1);
+    const p2 = document.createElementNS('http://www.w3.org/2000/svg','path'); p2.setAttribute('d',`M${x},550 L${x},950`); v.appendChild(p2);
+  }
+  for (let r=0; r<10; r++){
+    const y = 50+r*100;
+    const l = document.createElementNS('http://www.w3.org/2000/svg','path'); l.setAttribute('d',`M50,${y} L850,${y}`); h.appendChild(l);
+  }
+})();
+
+let VIEW = { version: 0, turn: 'red', you: null, result:null, board:null, moves:[] };
+const ICON_MAP = { R:'ic-chariot', H:'ic-horse', E:'ic-elephant', A:'ic-advisor', G:'ic-general', C:'ic-cannon', S:'ic-soldier' };
+function posToXY(pos){ const [r,c]=pos; return {x:50+c*100, y:50+r*100}; }
+function renderPieces(){
+  piecesG.innerHTML = '';
+  if (!VIEW.board) return;
+  for(let r=0;r<10;r++){
+    for(let c=0;c<9;c++){
+      const p = VIEW.board[r][c]; if(!p) continue;
+      const {x,y} = posToXY([r,c]);
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.classList.add('piece'); const side = p[0]==='r' ? 'red' : 'black'; g.classList.add(side);
+      g.dataset.r=r; g.dataset.c=c; g.dataset.side=side; g.dataset.role=p.slice(2);
+      g.setAttribute('transform',`translate(${x-40},${y-40})`);
+      const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ring.setAttribute('cx','40'); ring.setAttribute('cy','40'); ring.setAttribute('r','34'); ring.setAttribute('class','ring'); g.appendChild(ring);
+      const inner = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      inner.setAttribute('cx','40'); inner.setAttribute('cy','40'); inner.setAttribute('r','28');
+      inner.setAttribute('fill','none'); inner.setAttribute('stroke','currentColor');
+      inner.setAttribute('stroke-opacity','0.25'); inner.setAttribute('stroke-width','2.8'); g.appendChild(inner);
+      const iconWrap = document.createElementNS('http://www.w3.org/2000/svg','g');
+      iconWrap.setAttribute('transform', `translate(40,${40+ICON_OFFSET_Y}) scale(${ICON_SCALE}) translate(-32,-32)`);
+      const use = document.createElementNS('http://www.w3.org/2000/svg','use');
+      const role = p.slice(2); use.setAttributeNS('http://www.w3.org/1999/xlink','href','#'+ICON_MAP[role]);
+      use.setAttribute('class','icon');
+      use.setAttribute('stroke-width', String(ICON_STROKE));
+      iconWrap.appendChild(use);
+      g.appendChild(iconWrap);
+      piecesG.appendChild(g);
+    }
+  }
+}
+function log(msg){ const line=document.createElement('div'); line.textContent=msg; logEl.prepend(line); }
+function setStatus(t){ statusEl.textContent=t; }
+
+function updatePills(){
+  if(!VIEW) return;
+  // Seat
+  const whoSpan = seatPill.querySelector('.who');
+  whoSpan.textContent = VIEW.you ? (VIEW.you==='red'?'Red':'Black') : '—';
+  whoSpan.className = 'who ' + (VIEW.you||'');
+  // Turn
+  turnPill.classList.remove('red','black');
+  turnPill.classList.add(VIEW.turn);
+  turnPill.querySelector('.txt').textContent = 'Turn: ' + (VIEW.turn==='red'?'Red':'Black');
+}
+
+let selectSq=null; let legalTargets=[];
+function clearHighlights(){ hlG.innerHTML=''; legalTargets=[]; }
+function drawHighlights(){
+  hlG.innerHTML='';
+  legalTargets.forEach(([r,c])=>{
+    const {x,y}=posToXY([r,c]);
+    const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx',x); dot.setAttribute('cy',y); dot.setAttribute('r','18'); dot.setAttribute('class','sq-move'); hlG.appendChild(dot);
+  });
+  if(selectSq){
+    const {x,y}=posToXY(selectSq);
+    const s=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    s.setAttribute('x',x-45); s.setAttribute('y',y-45); s.setAttribute('width',90); s.setAttribute('height',90); s.setAttribute('class','sq-hl'); hlG.appendChild(s);
+  }
+}
+function boardAt(r,c){ if(r<0||r>9||c<0||c>8) return null; return VIEW.board[r][c]; }
+function genMoves(r,c){
+  const me = VIEW.board[r][c]; if(!me) return [];
+  const side = me[0]==='r'?'red':'black';
+  if(side!==VIEW.you || VIEW.turn!==VIEW.you || VIEW.result) return [];
+  const role = me.slice(2); const out=[];
+  const push=(rr,cc)=>{ if(rr<0||rr>9||cc<0||cc>8) return; const occ=boardAt(rr,cc); if(!occ || occ[0]!==me[0]) out.push([rr,cc]); };
+  const empty=(rr,cc)=>!boardAt(rr,cc);
+  const enemy=(rr,cc)=>{const v=boardAt(rr,cc); return v && v[0]!==me[0];};
+
+  switch(role){
+    case 'R':{
+      for(let rr=r-1; rr>=0; rr--){ if(empty(rr,c)) out.push([rr,c]); else { if(enemy(rr,c)) out.push([rr,c]); break; } }
+      for(let rr=r+1; rr<=9; rr++){ if(empty(rr,c)) out.push([rr,c]); else { if(enemy(rr,c)) out.push([rr,c]); break; } }
+      for(let cc=c-1; cc>=0; cc--){ if(empty(r,cc)) out.push([r,cc]); else { if(enemy(r,cc)) out.push([r,cc]); break; } }
+      for(let cc=c+1; cc<=8; cc++){ if(empty(r,cc)) out.push([r,cc]); else { if(enemy(r,cc)) out.push([r,cc]); break; } }
+      break; }
+    case 'H':{
+      const cand=[
+        [-2,-1, -1,0],[-2,1, -1,0],[2,-1, 1,0],[2,1, 1,0],
+        [-1,-2, 0,-1],[1,-2, 0,-1],[-1,2, 0,1],[1,2, 0,1]
+      ];
+      cand.forEach(([dr,dc, lr,lc])=>{ if(boardAt(r+lr,c+lc)) return; push(r+dr, c+dc); });
+      break; }
+    case 'E':{
+      const home = (side==='red') ? (r>=5) : (r<=4);
+      if(home){
+        [[-2,-2],[-2,2],[2,-2],[2,2]].forEach(([dr,dc])=>{
+          const mr=r+dr/2, mc=c+dc/2; if(boardAt(mr,mc)) return;
+          const rr=r+dr, cc=c+dc; if((side==='red' && rr>=5) || (side==='black' && rr<=4)) push(rr,cc);
+        });
+      } break; }
+    case 'A':{
+      const inPal=(rr,cc)=> (cc>=3 && cc<=5 && ((side==='red' && rr>=7) || (side==='black' && rr<=2)));
+      [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc])=>{ const rr=r+dr,cc=c+dc; if(inPal(rr,cc)) push(rr,cc); });
+      break; }
+    case 'G':{
+      const inPal=(rr,cc)=> (cc>=3 && cc<=5 && ((side==='red' && rr>=7) || (side==='black' && rr<=2)));
+      [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{ const rr=r+dr,cc=c+dc; if(inPal(rr,cc)) push(rr,cc); });
+      break; }
+    case 'C':{
+      for(let rr=r-1; rr>=0; rr--){ if(empty(rr,c)) out.push([rr,c]); else { break; } }
+      for(let rr=r+1; rr<=9; rr++){ if(empty(rr,c)) out.push([rr,c]); else { break; } }
+      for(let cc=c-1; cc>=0; cc--){ if(empty(r,cc)) out.push([r,cc]); else { break; } }
+      for(let cc=c+1; cc<=8; cc++){ if(empty(r,cc)) out.push([r,cc]); else { break; } }
+      const scan=(dr,dc)=>{
+        let rr=r+dr, cc=c+dc, screens=0;
+        while(rr>=0&&rr<=9&&cc>=0&&cc<=8){
+          if(boardAt(rr,cc)) { screens++; if(screens===2){ if(enemy(rr,cc)) out.push([rr,cc]); break; } }
+          rr+=dr; cc+=dc;
+        }
+      };
+      scan(-1,0); scan(1,0); scan(0,-1); scan(0,1);
+      break; }
+    case 'S':{
+      const dir = (side==='red')? -1 : 1;
+      push(r+dir,c);
+      const crossed = (side==='red') ? (r<=4) : (r>=5);
+      if(crossed){ push(r, c-1); push(r, c+1); }
+      break; }
+  }
+  return out;
+}
+function onBoardClick(e){
+  if(!e.target.closest) return;
+  const g = e.target.closest('.piece');
+  const svg = document.getElementById('board');
+  const getRC = (evt)=>{
+    const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+    const ctm = svg.getScreenCTM().inverse(); const loc = pt.matrixTransform(ctm);
+    const c = Math.round((loc.x-50)/100); const r = Math.round((loc.y-50)/100);
+    return {r,c};
+  };
+  const {r:cr, c:cc} = getRC(e);
+  if(cr<0||cr>9||cc<0||cc>8) return;
+  if(selectSq){
+    if(legalTargets.some(([rr,cc2])=>rr===cr&&cc2===cc)){ sendMove(selectSq.r, selectSq.c, cr, cc); }
+    selectSq=null; clearHighlights(); drawHighlights(); return;
+  }
+  if(g){
+    const r = +g.dataset.r, c = +g.dataset.c;
+    const side = g.dataset.side;
+    if(side!==VIEW.you){ setStatus('That piece is not yours.'); return; }
+    if(VIEW.turn!==VIEW.you){ setStatus("It's not your turn."); return; }
+    selectSq={r,c}; legalTargets = genMoves(r,c); drawHighlights();
+  }
+}
+document.getElementById('board').addEventListener('click', onBoardClick);
+
+async function ensureLoaded(){
+  if(!GAME || !TOKEN){ setStatus('No game/token in URL. Click “New Game”.'); return; }
+  const res = await api('state', { gameId: GAME, token: TOKEN, since: VIEW.version });
+  if(res.error){ setStatus(res.error); return; }
+  if(res.changed){
+    VIEW = res.view; renderPieces(); gameIdSpan.textContent = GAME;
+    updatePills();
+    shareBox.innerHTML = `Red: <code>${location.origin+API_BASE}?game=${GAME}&token=${res.redLinkToken}</code><br>Black: <code>${location.origin+API_BASE}?game=${GAME}&token=${res.blackLinkToken}</code>`;
+  }
+}
+async function sendMove(r1,c1,r2,c2){
+  setStatus('Submitting move…');
+  const res = await api('move', { gameId: GAME, token: TOKEN, from:[r1,c1], to:[r2,c2], clientVersion: VIEW.version });
+  if(res.error){ setStatus(res.error); await ensureLoaded(); return; }
+  VIEW = res.view; renderPieces(); updatePills();
+  if(VIEW.result){ setStatus('Game over: '+VIEW.result.reason+' – winner: '+VIEW.result.winner); }
+  else setStatus('Move accepted. '+(VIEW.turn==='red'?'Red':'Black')+" to move.");
+}
+let poller=null; function startPolling(){ if(poller) clearInterval(poller); poller=setInterval(ensureLoaded, 2000); }
+document.getElementById('btnRefresh').onclick = ()=>{ ensureLoaded(); };
+document.getElementById('btnResign').onclick = async ()=>{
+  if(!confirm('Resign the game?')) return;
+  const res = await api('resign', { gameId: GAME, token: TOKEN });
+  if(res.error){ setStatus(res.error); return; }
+  VIEW = res.view; renderPieces(); updatePills(); setStatus('You resigned.');
+};
+document.getElementById('btnNew').onclick = async ()=>{
+  try{
+    const res = await api('create', { variant:'xiangqi' });
+    if(res.error){ alert('Create failed: ' + res.error); return; }
+    const { gameId, redUrl, blackUrl } = res;
+    GAME = gameId; TOKEN = redUrl.split('token=')[1];
+    history.replaceState({}, '', redUrl);
+    setStatus('New game created. You are RED. Share the black link with your opponent.');
+    document.getElementById('copyRed').onclick = (e)=>{ e.preventDefault(); navigator.clipboard.writeText(redUrl); };
+    document.getElementById('copyBlack').onclick = (e)=>{ e.preventDefault(); navigator.clipboard.writeText(blackUrl); };
+    ensureLoaded(); startPolling();
+  }catch(e){ alert('Network/API error: ' + e); }
+};
+(function(){ if(GAME&&TOKEN){ setStatus('Loading game…'); ensureLoaded().then(startPolling); } else setStatus('Click “New Game” to start.'); })();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <g id="ic-chariot" fill="currentColor" stroke="currentColor" stroke-width="2.2">
+            <path d="M12 22 h40 l4 8 H8z" fill="none"/>
+            <rect x="12" y="30" width="40" height="18" rx="3" fill="none"/>
+            <path d="M22 30 v18 M32 30 v18 M42 30 v18" stroke-width="2"/>
+            <circle cx="22" cy="54" r="6" fill="none"/><path d="M22 48 v12 M16 54 h12" stroke-width="2"/>
+            <circle cx="42" cy="54" r="6" fill="none"/><path d="M42 48 v12 M36 54 h12" stroke-width="2"/>
+          </g>
+</svg>

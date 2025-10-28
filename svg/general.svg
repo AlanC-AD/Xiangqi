@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <g id="ic-general" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 40 h32 l-2 -12 -8 6 -6 -10 -6 10 -8 -6z" />
+            <rect x="18" y="40" width="28" height="8" rx="2"/>
+            <circle cx="32" cy="30" r="3" fill="currentColor"/>
+          </g>
+</svg>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <g id="ic-horse" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M46 20 l-8 6 -4 -6 -10 8 -6 10 8 6 v8 a12 12 0 0 0 24 0 v-8 l6 -10" />
+            <circle cx="36" cy="28" r="1.8" fill="currentColor"/>
+            <path d="M32 22 l-4 -6" />
+          </g>
+</svg>

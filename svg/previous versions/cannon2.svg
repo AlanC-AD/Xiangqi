@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <g id="ic-cannon" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 36 h28 l8 -6" />
+            <rect x="18" y="38" width="20" height="8" rx="2"/>
+            <circle cx="40" cy="52" r="8"/>
+            <path d="M40 44 v16 M32 52 h16" />
+            <path d="M52 28 l4 -4 M54 32 l6 0" />
+          </g>
+</svg>

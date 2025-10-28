@@ -473,7 +473,20 @@ async function ensureLoaded(){
     updatePills();
     const redLink = `${location.origin+API_BASE}?game=${GAME}&token=${res.redLinkToken}`;
     const blackLink = `${location.origin+API_BASE}?game=${GAME}&token=${res.blackLinkToken}`;
+    const redLink = `${location.origin+API_BASE}?game=${GAME}&token=${res.redLinkToken}`;
+    const blackLink = `${location.origin+API_BASE}?game=${GAME}&token=${res.blackLinkToken}`;
     shareBox.innerHTML = `<span style="color:red;font-weight:bold;">Red:</span> <code>${location.origin+API_BASE}?game=${GAME}&token=${res.redLinkToken}</code><br><br><span style="color:black;font-weight:bold;">Black:</span> <code>${location.origin+API_BASE}?game=${GAME}&token=${res.blackLinkToken}</code>`;    
+    // Update top copy links to actually work
+    document.getElementById('copyRed').onclick = e => {
+      e.preventDefault();
+      navigator.clipboard.writeText(redLink);
+      setStatus('✅ Red link copied to clipboard.');
+    };
+    document.getElementById('copyBlack').onclick = e => {
+      e.preventDefault();
+      navigator.clipboard.writeText(blackLink);
+      setStatus('✅ Black link copied to clipboard.');
+    };
     // Update top copy links to actually work
     document.getElementById('copyRed').onclick = e => {
       e.preventDefault();

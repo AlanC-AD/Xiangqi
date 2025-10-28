@@ -63,16 +63,48 @@
     .sq-move{fill:rgba(76,201,240,.25)}
 
     /* Sidebar */
-    .side{background:#0e1731;border:1px solid #23335f;border-radius:14px;padding:12px;overflow:auto;max-height:calc(100vh - 160px)}
+    .side{background:#0e1731;background-color: #666666;border:1px solid #23335f;border-radius:14px;padding:12px;overflow:auto;max-height:calc(100vh - 160px)}
     .side h2{margin:.2rem 0 .6rem;font-size:1rem}
     .row{display:flex;gap:8px;flex-wrap:wrap}
     button{background:linear-gradient(180deg,#1a2b57,#0f1b3f);border:1px solid #29407d;color:#cfe8ff;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
     button:disabled{opacity:.5;cursor:not-allowed}
     input,select{background:#0c1430;border:1px solid #24356b;color:#e5f1ff;border-radius:8px;padding:8px 10px}
     .links{font-size:.9rem;color:#b7d5ff}
+    /* Prevent share links from overflowing */
+    #shareBox code {
+      display: inline-block;
+      word-break: break-all;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
+    #shareBox {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
+
     a{color:#7cd3ff}
     .log{background:#0b132c;border:1px solid #1f2f61;border-radius:10px;padding:10px;max-height:180px;overflow:auto;font-family:ui-monospace,Consolas,monospace}
     .status{margin:.4rem 0 .8rem;color:#b7d5ff}
+  
+    /* Replay overlay (opponent's last move) */
+    #highlights .replay.from,
+    #highlights .replay.to{
+      fill: none;
+      stroke-width: 6;
+    }
+    #highlights .replay.from{ stroke: var(--accent); }
+    #highlights .replay.to  { stroke: var(--red); }
+    #highlights .replay.trail{
+      fill: none;
+      stroke: var(--red);
+      stroke-width: 3;
+      stroke-dasharray: 8 8;
+      opacity: 0.9;
+    }
+    .hidden0{ opacity: 0.001; }
+
   </style>
 </head>
 <body>
@@ -84,7 +116,7 @@
       <span class="pill turn" id="turnPill"><span class="dot"></span><span class="txt">Turn: —</span></span>
     </div>
     <div class="links">
-      (Game: <span id="gameIdSpan">—</span>)   ·   <a id="copyRed" href="#"><strong>Copy Red link</strong></a> · <a id="copyBlack" href="#"><strong>Copy Black link</strong></a>  ·  v2.1
+      (Game: <span id="gameIdSpan">—</span>)   ·   <a id="copyRed" href="#"><strong>Copy Red link</strong></a> · <a id="copyBlack" href="#"><strong>Copy Black link</strong></a>  ·  v3.5
     </div>
   </header>
 
@@ -125,6 +157,8 @@
 
         <!-- Pieces layer -->
         <g id="pieces"></g>
+        <!-- FX overlay on top of pieces -->
+        <g id="fx"></g>
         </g>
       </svg>
     </div>
@@ -134,6 +168,7 @@
         <button id="btnNew">➕ New Game</button>
         <button id="btnResign">🏳️ Resign</button>
         <button id="btnRefresh">🔄 Refresh</button>
+        <button id="btnShowLast">👀 Show Opponent’s Last Move</button>
       </div>
       <div class="status" id="status">Ready.</div>
       <div class="log" id="log"></div>
@@ -202,7 +237,73 @@ function applyOrientation(){
   applyLabelUpright();           // <-- keep river text upright
 }
 
+// ---- Move logging & detection for replay ----
+const MOVE_LOG = [];
+function cloneBoard(b){ return b ? b.map(row=>row.slice()) : null; }
+function detectMove(prev, next){
+  if(!prev || !next) return null;
+  let from=null, to=null, color=null, role=null;
+  for(let r=0;r<10;r++){
+    for(let c=0;c<9;c++){
+      const a=prev[r][c], b=next[r][c];
+      if(a!==b){
+        if(a && !b) from=[r,c];
+        if(b){ to=[r,c]; color = (b[0]==='r')?'red':'black'; role=b.slice(2); }
+      }
+    }
+  }
+  if(from && to){ return {from, to, color, role}; }
+  return null;
+}
+function opponentOf(me){ return me==='black'?'red':'black'; }
+function getOpponentsLastMove(){
+  const them = opponentOf(VIEW.you);
+  for(let i=MOVE_LOG.length-1;i>=0;i--){ if(MOVE_LOG[i].color===them) return MOVE_LOG[i]; }
+  return null;
+}
+
+function buildGhostPiece(side, role){
+  const svgNS='http://www.w3.org/2000/svg';
+  const g=document.createElementNS(svgNS,'g'); g.classList.add('piece','ghost', side);
+  const ring=document.createElementNS(svgNS,'circle'); ring.setAttribute('cx','40'); ring.setAttribute('cy','40'); ring.setAttribute('r','34'); ring.setAttribute('class','ring'); g.appendChild(ring);
+  const inner=document.createElementNS(svgNS,'circle'); inner.setAttribute('cx','40'); inner.setAttribute('cy','40'); inner.setAttribute('r','28'); inner.setAttribute('fill','none'); inner.setAttribute('stroke','currentColor'); inner.setAttribute('stroke-opacity','0.25'); inner.setAttribute('stroke-width','2.8'); g.appendChild(inner);
+  const iconWrap=document.createElementNS(svgNS,'g');
+  const ICON_FLIP_NUDGE_Y = 9; const dy = isFlipped()?ICON_FLIP_NUDGE_Y:0;
+  const base = `translate(40,${40 + ICON_OFFSET_Y + dy}) scale(${ICON_SCALE}) translate(-32,-32)`;
+  iconWrap.setAttribute('transform', isFlipped()? `${base} rotate(180 32 32)` : base);
+  const use=document.createElementNS(svgNS,'use'); use.setAttributeNS('http://www.w3.org/1999/xlink','href','#'+ICON_MAP[role]); use.setAttribute('class','icon'); use.setAttribute('stroke-width', String(ICON_STROKE));
+  iconWrap.appendChild(use); g.appendChild(iconWrap);
+  return g;
+}
+
+const REPLAY_MS = 3000;
+function showOpponentsLastMove(){
+  const mv = getOpponentsLastMove();
+  if(!mv){ alert('No opponent move to show yet.'); return; }
+  const svgNS='http://www.w3.org/2000/svg';
+  const fx = document.getElementById('fx'); const hl = document.getElementById('highlights');
+  if(!fx||!hl) return;
+  fx.innerHTML=''; Array.from(hl.querySelectorAll('.replay')).forEach(n=>n.remove());
+  function ringAt(pos, cls){ const {x,y}=posToXY(pos); const c=document.createElementNS(svgNS,'circle'); c.setAttribute('class','replay '+cls); c.setAttribute('cx',x); c.setAttribute('cy',y); c.setAttribute('r',36); hl.appendChild(c); }
+  ringAt(mv.from,'from'); ringAt(mv.to,'to');
+  const {x:fx1,y:fy1}=posToXY(mv.from); const {x:fx2,y:fy2}=posToXY(mv.to);
+  const line=document.createElementNS(svgNS,'line'); line.setAttribute('class','replay trail'); line.setAttribute('x1',fx1); line.setAttribute('y1',fy1); line.setAttribute('x2',fx2); line.setAttribute('y2',fy2); hl.appendChild(line);
+  const destReal = document.querySelector(`#pieces g[data-r="${mv.to[0]}"][data-c="${mv.to[1]}"]`);
+  if(destReal) destReal.classList.add('hidden0');
+  const side = mv.color; const role = mv.role || (VIEW.board[mv.to[0]][mv.to[1]]? VIEW.board[mv.to[0]][mv.to[1]].slice(2):'S');
+  const ghost = buildGhostPiece(side, role); fx.appendChild(ghost);
+  const start = posToXY(mv.from); const end = posToXY(mv.to);
+  const tStart = performance.now(); const D = 800;
+  function placeAt(pt){ ghost.setAttribute('transform', `translate(${pt.x-40},${pt.y-40})`); }
+  placeAt(start);
+  function step(t){ const k = Math.min(1, (t - tStart)/D); const ease = k<.5 ? 2*k*k : 1 - Math.pow(-2*k+2,2)/2; const x = start.x + (end.x - start.x)*ease; const y = start.y + (end.y - start.y)*ease; placeAt({x,y}); if(k<1) requestAnimationFrame(step); else finish(); }
+  function finish(){ setTimeout(()=>{ fx.innerHTML=''; Array.from(hl.querySelectorAll('.replay')).forEach(n=>n.remove()); if(destReal) destReal.classList.remove('hidden0'); }, Math.max(0, REPLAY_MS-800)); }
+  requestAnimationFrame(step);
+}
+
+
 function renderPieces(){
+  applyOrientation();
   piecesG.innerHTML = '';
   if (!VIEW.board) return;
   for(let r=0;r<10;r++){
@@ -366,26 +467,45 @@ async function ensureLoaded(){
   const res = await api('state', { gameId: GAME, token: TOKEN, since: VIEW.version });
   if(res.error){ setStatus(res.error); return; }
   if(res.changed){
+    const prevBoard = cloneBoard(VIEW.board);
     VIEW = res.view; renderPieces(); gameIdSpan.textContent = GAME;
+    const mv = detectMove(prevBoard, VIEW.board); if(mv) MOVE_LOG.push(mv);
     updatePills();
-    shareBox.innerHTML = `Red: <code>${location.origin+API_BASE}?game=${GAME}&token=${res.redLinkToken}</code><br>Black: <code>${location.origin+API_BASE}?game=${GAME}&token=${res.blackLinkToken}</code>`;
+    const redLink = `${location.origin+API_BASE}?game=${GAME}&token=${res.redLinkToken}`;
+    const blackLink = `${location.origin+API_BASE}?game=${GAME}&token=${res.blackLinkToken}`;
+    shareBox.innerHTML = `<span style="color:red;font-weight:bold;">Red:</span> <code>${location.origin+API_BASE}?game=${GAME}&token=${res.redLinkToken}</code><br><br><span style="color:black;font-weight:bold;">Black:</span> <code>${location.origin+API_BASE}?game=${GAME}&token=${res.blackLinkToken}</code>`;    
+    // Update top copy links to actually work
+    document.getElementById('copyRed').onclick = e => {
+      e.preventDefault();
+      navigator.clipboard.writeText(redLink);
+      setStatus('✅ Red link copied to clipboard.');
+    };
+    document.getElementById('copyBlack').onclick = e => {
+      e.preventDefault();
+      navigator.clipboard.writeText(blackLink);
+      setStatus('✅ Black link copied to clipboard.');
+    };
   }
 }
 async function sendMove(r1,c1,r2,c2){
   setStatus('Submitting move…');
+  const prevBoard = cloneBoard(VIEW.board);
   const res = await api('move', { gameId: GAME, token: TOKEN, from:[r1,c1], to:[r2,c2], clientVersion: VIEW.version });
   if(res.error){ setStatus(res.error); await ensureLoaded(); return; }
   VIEW = res.view; renderPieces(); updatePills();
+  const mvLocal = detectMove(prevBoard, VIEW.board); if(mvLocal) MOVE_LOG.push(mvLocal);
   if(VIEW.result){ setStatus('Game over: '+VIEW.result.reason+' – winner: '+VIEW.result.winner); }
   else setStatus('Move accepted. '+(VIEW.turn==='red'?'Red':'Black')+" to move.");
 }
 let poller=null; function startPolling(){ if(poller) clearInterval(poller); poller=setInterval(ensureLoaded, 2000); }
 document.getElementById('btnRefresh').onclick = ()=>{ ensureLoaded(); };
+document.getElementById('btnShowLast').onclick = ()=>{ showOpponentsLastMove(); };
 document.getElementById('btnResign').onclick = async ()=>{
   if(!confirm('Resign the game?')) return;
   const res = await api('resign', { gameId: GAME, token: TOKEN });
   if(res.error){ setStatus(res.error); return; }
-  VIEW = res.view; renderPieces(); updatePills(); setStatus('You resigned.');
+  VIEW = res.view; renderPieces(); updatePills();
+  const mvLocal = detectMove(prevBoard, VIEW.board); if(mvLocal) MOVE_LOG.push(mvLocal); setStatus('You resigned.');
 };
 document.getElementById('btnNew').onclick = async ()=>{
   try{
